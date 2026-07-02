@@ -162,6 +162,48 @@ export class User extends Model<
       .toString('hex')
   }
 
+  static associate(sequelize: Sequelize) {
+    // User follows user (self-referential super many-to-many).
+    User.belongsToMany(User, {
+      through: sequelize.models.UserFollowUser,
+      as: 'follows',
+      foreignKey: 'userId',
+      otherKey: 'followId',
+    })
+    User.belongsToMany(User, {
+      through: sequelize.models.UserFollowUser,
+      as: 'followed',
+      foreignKey: 'followId',
+      otherKey: 'userId',
+    })
+    User.hasMany(sequelize.models.UserFollowUser, { foreignKey: 'followId' })
+
+    // User favorites articles (super many-to-many).
+    User.belongsToMany(sequelize.models.Article, {
+      through: sequelize.models.UserFavoriteArticle,
+      as: 'favorites',
+      foreignKey: 'userId',
+      otherKey: 'articleId',
+    })
+    User.hasMany(sequelize.models.UserFavoriteArticle, {
+      foreignKey: 'userId',
+    })
+
+    // User authors articles.
+    User.hasMany(sequelize.models.Article, {
+      as: 'authoredArticles',
+      foreignKey: 'authorId',
+      onDelete: 'CASCADE',
+      hooks: true,
+    })
+
+    // User authors comments.
+    User.hasMany(sequelize.models.Comment, {
+      foreignKey: 'authorId',
+      onDelete: 'CASCADE',
+    })
+  }
+
   static initModel(sequelize: Sequelize): typeof User {
     User.init(
       {

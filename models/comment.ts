@@ -36,6 +36,25 @@ export class Comment extends Model<
     }
   }
 
+  static associate(sequelize: Sequelize) {
+    // Comment belongs to an article.
+    Comment.belongsTo(sequelize.models.Article, {
+      foreignKey: {
+        name: 'articleId',
+        allowNull: false,
+      },
+    })
+
+    // Comment is authored by a user.
+    Comment.belongsTo(sequelize.models.User, {
+      as: 'author',
+      foreignKey: {
+        name: 'authorId',
+        allowNull: false,
+      },
+    })
+  }
+
   static initModel(sequelize: Sequelize): typeof Comment {
     Comment.init(
       {

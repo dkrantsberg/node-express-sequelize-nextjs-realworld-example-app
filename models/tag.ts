@@ -16,6 +16,16 @@ export class Tag extends Model<
   declare createdAt: CreationOptional<Date>
   declare updatedAt: CreationOptional<Date>
 
+  static associate(sequelize: Sequelize) {
+    // Tag is applied to many articles (many-to-many via the ArticleTag join table).
+    Tag.belongsToMany(sequelize.models.Article, {
+      through: 'ArticleTag',
+      as: 'taggedArticles',
+      foreignKey: 'tagId',
+      otherKey: 'articleId',
+    })
+  }
+
   static initModel(sequelize: Sequelize): typeof Tag {
     Tag.init(
       {

@@ -1,13 +1,7 @@
 import fs from 'fs'
 import path from 'path'
 
-import {
-  DatabaseError,
-  DataTypes,
-  Options,
-  Sequelize,
-  SyncOptions,
-} from 'sequelize'
+import { DatabaseError, Options, Sequelize, SyncOptions } from 'sequelize'
 
 import config from '../front/config'
 import { Article } from './article'
@@ -15,6 +9,8 @@ import { Comment } from './comment'
 import { SequelizeMeta } from './sequelize_meta'
 import { Tag } from './tag'
 import { User } from './user'
+import { UserFavoriteArticle } from './user_favorite_article'
+import { UserFollowUser } from './user_follow_user'
 
 export function getSequelize(
   toplevelDir?: string,
@@ -46,140 +42,23 @@ export function getSequelize(
     sequelize = new Sequelize(sequelizeParams)
   }
 
+  // Register every model on this sequelize instance.
   Article.initModel(sequelize)
   Comment.initModel(sequelize)
   SequelizeMeta.initModel(sequelize)
   Tag.initModel(sequelize)
   User.initModel(sequelize)
+  UserFavoriteArticle.initModel(sequelize)
+  UserFollowUser.initModel(sequelize)
 
-  // Associations.
-
-  // User follow user (super many to many)
-  const UserFollowUser = sequelize.define(
-    'UserFollowUser',
-    {
-      userId: {
-        type: DataTypes.INTEGER,
-        references: {
-          model: User,
-          key: 'id',
-        },
-      },
-      followId: {
-        type: DataTypes.INTEGER,
-        references: {
-          model: User,
-          key: 'id',
-        },
-      },
-    },
-    {
-      tableName: 'UserFollowUser',
-    }
-  )
-  User.belongsToMany(User, {
-    through: UserFollowUser,
-    as: 'follows',
-    foreignKey: 'userId',
-    otherKey: 'followId',
-  })
-  User.belongsToMany(User, {
-    through: UserFollowUser,
-    as: 'followed',
-    foreignKey: 'followId',
-    otherKey: 'userId',
-  })
-  UserFollowUser.belongsTo(User, { foreignKey: 'userId' })
-  User.hasMany(UserFollowUser, { foreignKey: 'followId' })
-
-  // User favorite Article (super many to many)
-  const UserFavoriteArticle = sequelize.define('UserFavoriteArticle', {
-    userId: {
-      type: DataTypes.INTEGER,
-      references: {
-        model: User,
-        key: 'id',
-      },
-    },
-    articleId: {
-      type: DataTypes.INTEGER,
-      references: {
-        model: Article,
-        key: 'id',
-      },
-    },
-  })
-  Article.belongsToMany(User, {
-    through: UserFavoriteArticle,
-    as: 'favoritedBy',
-    foreignKey: 'articleId',
-    otherKey: 'userId',
-  })
-  User.belongsToMany(Article, {
-    through: UserFavoriteArticle,
-    as: 'favorites',
-    foreignKey: 'userId',
-    otherKey: 'articleId',
-  })
-  Article.hasMany(UserFavoriteArticle, { foreignKey: 'articleId' })
-  UserFavoriteArticle.belongsTo(Article, { foreignKey: 'articleId' })
-  User.hasMany(UserFavoriteArticle, { foreignKey: 'userId' })
-  UserFavoriteArticle.belongsTo(User, { foreignKey: 'userId' })
-
-  // User authors Article
-  User.hasMany(Article, {
-    as: 'authoredArticles',
-    foreignKey: 'authorId',
-    onDelete: 'CASCADE',
-    hooks: true,
-  })
-  Article.belongsTo(User, {
-    as: 'author',
-    hooks: true,
-    foreignKey: {
-      name: 'authorId',
-      allowNull: false,
-    },
-  })
-
-  // Article has Comment
-  Article.hasMany(Comment, {
-    foreignKey: 'articleId',
-    onDelete: 'CASCADE',
-  })
-  Comment.belongsTo(Article, {
-    foreignKey: {
-      name: 'articleId',
-      allowNull: false,
-    },
-  })
-
-  // User authors Comment
-  User.hasMany(Comment, {
-    foreignKey: 'authorId',
-    onDelete: 'CASCADE',
-  })
-  Comment.belongsTo(User, {
-    as: 'author',
-    foreignKey: {
-      name: 'authorId',
-      allowNull: false,
-    },
-  })
-
-  // Tag Article
-  Article.belongsToMany(Tag, {
-    through: 'ArticleTag',
-    as: 'tags',
-    foreignKey: 'articleId',
-    otherKey: 'tagId',
-  })
-  Tag.belongsToMany(Article, {
-    through: 'ArticleTag',
-    as: 'taggedArticles',
-    foreignKey: 'tagId',
-    otherKey: 'articleId',
-  })
+  // Wire up relationships. Each model declares its own associations via
+  // hasMany()/hasOne()/belongsTo()/belongsToMany() in a static associate().
+  User.associate(sequelize)
+  Article.associate(sequelize)
+  Comment.associate(sequelize)
+  Tag.associate(sequelize)
+  UserFavoriteArticle.associate(sequelize)
+  UserFollowUser.associate(sequelize)
 
   return sequelize
 }

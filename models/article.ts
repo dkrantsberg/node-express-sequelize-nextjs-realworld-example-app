@@ -164,6 +164,43 @@ export class Article extends Model<
     }
   }
 
+  static associate(sequelize: Sequelize) {
+    // Articles are favorited by users (super many-to-many).
+    Article.belongsToMany(sequelize.models.User, {
+      through: sequelize.models.UserFavoriteArticle,
+      as: 'favoritedBy',
+      foreignKey: 'articleId',
+      otherKey: 'userId',
+    })
+    Article.hasMany(sequelize.models.UserFavoriteArticle, {
+      foreignKey: 'articleId',
+    })
+
+    // Article is authored by a user.
+    Article.belongsTo(sequelize.models.User, {
+      as: 'author',
+      hooks: true,
+      foreignKey: {
+        name: 'authorId',
+        allowNull: false,
+      },
+    })
+
+    // Article has comments.
+    Article.hasMany(sequelize.models.Comment, {
+      foreignKey: 'articleId',
+      onDelete: 'CASCADE',
+    })
+
+    // Article is tagged with tags (many-to-many via the ArticleTag join table).
+    Article.belongsToMany(sequelize.models.Tag, {
+      through: 'ArticleTag',
+      as: 'tags',
+      foreignKey: 'articleId',
+      otherKey: 'tagId',
+    })
+  }
+
   static initModel(sequelize: Sequelize): typeof Article {
     Article.init(
       {
