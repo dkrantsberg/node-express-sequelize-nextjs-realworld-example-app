@@ -1,153 +1,182 @@
-# Node.js + Express + Sequelize + Next.js RealWorld example app
+# Node.js + Express + Sequelize + React RealWorld example app
 
-A fullstack TypeScript implementation of the [RealWorld](https://github.com/gothinkster/realworld) spec ("Conduit"): a Medium-style blogging platform with articles, comments, tags, favorites, following, and JWT auth.
+An implementation of the [RealWorld](https://github.com/gothinkster/realworld) spec ("Conduit"): a Medium-style blogging platform with articles, comments, tags, favorites, following, and JWT auth.
 
-Both the REST API and the Next.js frontend are served from a **single custom Next.js server**, and the app runs on **SQLite** for local development and **PostgreSQL** in production.
+The project is split into two **independent packages**:
+
+- [`backend/`](backend) — a TypeScript **Express + Sequelize JSON API** (no frontend, no Next.js). Runs on **SQLite** for local development and **PostgreSQL** in production.
+- [`frontend/`](frontend) — a **React single-page app** built with **Vite** and **React Router**, written in **JavaScript (JSX)**. It talks to the backend only over the `/api` HTTP interface.
+
+The two run as separate processes on separate ports. In development the Vite dev server proxies `/api` to the backend.
 
 ## Tech stack
 
-- **Runtime:** Node.js `>=20` (developed on Node 22), TypeScript executed directly via [`tsx`](https://github.com/privatenumber/tsx) — there is no separate backend build step.
-- **Server:** Express 4 + a [Next.js 12 custom server](https://nextjs.org/docs/advanced-features/custom-server). Next handles everything outside `/api`; Express handles `/api/*`.
-- **ORM:** Sequelize 6 with class-based models (`class extends Model` + `InferAttributes`).
-- **Auth:** JWT (`express-jwt` + `jsonwebtoken`), via a header token and, for safe GET requests, a cookie.
-- **Frontend:** React 17 + Next.js, rendered with ISR by default.
+**Backend** ([`backend/`](backend))
+- Node.js `>=20`, TypeScript executed directly via [`tsx`](https://github.com/privatenumber/tsx) — no separate build step.
+- Express 4 REST API mounted under `/api`.
+- Sequelize 6 with class-based models (`class extends Model`).
+- JWT auth via `express-jwt` + `jsonwebtoken` (token in the `Authorization` header).
+
+**Frontend** ([`frontend/`](frontend))
+- React 17 + [React Router 6](https://reactrouter.com/) for client-side routing.
+- [Vite 5](https://vitejs.dev/) dev server / bundler.
+- [SWR](https://swr.vercel.app/) + [axios](https://axios-http.com/) for data fetching against the API.
+- Its own plain-JS model classes ([`frontend/src/models/`](frontend/src/models)) — deliberately **not** shared with the backend Sequelize models.
 
 ## Architecture
 
-Everything runs in one process from [`app.ts`](app.ts):
+There is a clean HTTP boundary between the two packages:
 
-- **One Express app** mounts the API router under `/api` and forwards every other request to the Next.js request handler.
-- **One shared Sequelize instance** is created at startup and passed to Next.js requests as `req.sequelize`. Sharing a single connection is mandatory for the in-memory SQLite database used by the test suite (you cannot open two connections to the same in-memory DB).
-- The boundary between "frontend" and "backend" is deliberately blurred. Files under [`pages/`](pages) and [`back/`](back) contain Next.js data functions (`getStaticProps` / `getStaticPaths` / `getServerSideProps`) that talk to the database **directly** through Sequelize, without going through the HTTP API.
-
-### ISR and user-specific data
-
-The app is ISR (Incremental Static Regeneration) by default. Pages are prerendered as if logged out and cached; user-specific details (e.g. "do I follow this author", "have I favorited this article") are patched in by client-side API calls after the static page loads. A partial SSR variant lives under the `/ssr` route prefix.
+- The **backend** is a plain JSON API. Its entry point [`backend/app.ts`](backend/app.ts) builds one Express app, creates a single shared Sequelize instance, mounts the API under `/api`, and returns 404 for anything else. It never renders HTML. Routing is split: [`backend/routes.ts`](backend/routes.ts) declares every HTTP route (method, path, auth middleware, param preloaders) and maps each to a handler in [`backend/controllers/`](backend/controllers) (one module per resource).
+- The **frontend** is a static SPA. [`frontend/src/main.jsx`](frontend/src/main.jsx) mounts the app into `index.html`; [`frontend/src/App.jsx`](frontend/src/App.jsx) defines the routes and the shared shell (navbar, footer, global state). Pages fetch their data client-side from `/api` via SWR/axios.
+- The frontend defines **its own models** in [`frontend/src/models/`](frontend/src/models) (`Article`, `User`, `Comment`). API responses are wrapped into these classes at the fetch boundary, so components never depend on backend types.
 
 ### Authentication
 
-JWT authentication happens two ways:
-
-- **`Authorization` header** (standard JWT) — sent to the API routes, stored in `localStorage`, requires JavaScript.
-- **Cookie** — a copy of the JWT used only for safe HTTP methods (GET), so `getServerSideProps` can render a logged-in page on first load. Because the cookie is only used for safe methods, no CSRF synchronizer token is needed.
+JWT authentication is header-based: on login/register the token is stored in `localStorage` and sent as an `Authorization: Token <jwt>` header on subsequent API requests. A copy of the token is also kept in a cookie so the SPA can detect logged-in state on first load.
 
 ## Directory structure
 
 ```
-app.ts                 Custom server entry point (Express + Next.js)
-auth.ts                express-jwt middleware (auth.required / auth.optional)
-lib.ts                 Shared backend helpers (validation, ValidationError, tags)
-db.ts                  Shared Sequelize singleton used by Next.js data functions
-api/                   Express REST API routers (articles, users, profiles, tags)
-models/                Sequelize class models + getSequelize()/sync() in index.ts
-migrations/            Sequelize CLI migrations (plain .js, run via sequelize-cli)
-bin/
-  sync-db.ts           Create/migrate the DB (run before `next build`)
-  generate-demo-data.ts  Seed the DB with demo data
-back/                  Backend Next.js data functions (getStaticProps, etc.)
-front/                 Code importable by the frontend (components, API client, config)
-front/config.ts        Shared config (backend, frontend, and sequelize-cli)
-pages/                 Next.js pages (mix of frontend + direct DB access)
-types/express.d.ts     Express Request augmentation (sequelize, payload, ...)
-test.ts, test_lib.ts   Mocha test suite and data-generation helpers
+backend/                TypeScript Express + Sequelize JSON API
+  app.ts                Server entry point (builds the Express app, API only)
+  routes.ts             Declares every HTTP route (method + path + auth) -> controller
+  controllers/          Route handler modules (one per resource)
+    articleController.ts   Articles, comments, favorites (+ :article/:comment preloaders)
+    userController.ts      Current user, update, login, register
+    profileController.ts   Profiles, follow/unfollow (+ :username preloader)
+    tagController.ts       Tag list
+  config.ts             Backend config (DB, secret, port; also read by sequelize-cli)
+  auth.ts               express-jwt middleware (auth.required / auth.optional)
+  lib.ts                Backend helpers (validation, ValidationError, tags)
+  db.ts                 Shared Sequelize singleton
+  models/               Sequelize class models + getSequelize()/sync() in index.ts
+  migrations/           Sequelize CLI migrations (plain .js)
+  bin/
+    sync-db.ts          Create/migrate the DB
+    generate-demo-data.ts  Seed the DB with demo data
+  types/express.d.ts    Express Request augmentation (sequelize, payload, ...)
+  test.ts, test_lib.ts  Mocha test suite and data-generation helpers
+
+frontend/               Vite + React + React Router SPA (JavaScript/JSX)
+  index.html            HTML entry point
+  vite.config.js        Vite config + dev proxy (/api -> backend)
+  src/
+    main.jsx            Mounts <App/>, imports global CSS
+    App.jsx             Routes + app shell (SWRConfig, context, navbar, footer)
+    config.js           Frontend config (apiPath, appName, ...)
+    auth.js             Cookie + localStorage auth helpers
+    routes.js           Route path builders
+    useLoggedInUser.js  Hook resolving the current user from cookie/localStorage
+    api/                axios API clients + SWR fetcher
+    models/             Frontend model classes (Article, User, Comment)
+    components/         Reusable UI components
+    pages/              Route-level page components
+    styles/             Global SCSS/CSS
 ```
 
-Rule of thumb: anything under `front/` is safe to import from the browser; everything else is backend-only.
+## Local development
 
-## Local development with SQLite
+Run the two packages in separate terminals.
+
+**1. Backend API** (SQLite, port 3000):
 
 ```
-npm install --legacy-peer-deps
+cd backend
+npm install
 npm run dev
 ```
 
-Then visit http://localhost:3000. Both the API and the pages are served from that single server. `npm run dev` runs [`app.ts`](app.ts) through `tsx` under `nodemon`, restarting on backend changes.
+This runs [`backend/app.ts`](backend/app.ts) through `tsx` under `nodemon`, restarting on changes. The SQLite database is stored at `backend/db.sqlite3`. The API is at http://localhost:3000/api.
 
-The SQLite database is stored at `db.sqlite3`. `--legacy-peer-deps` is needed because `swr@0.3` declares a React 16 peer while the app uses React 17.
-
-To populate the database with demo data, see [Generate demo data](#generate-demo-data).
-
-### Optimized frontend (SQLite)
-
-Runs the prebuilt, production-optimized Next.js frontend while still using SQLite:
+**2. Frontend SPA** (Vite, port 5173):
 
 ```
-npm run build-dev
-npm run start-dev
+cd frontend
+npm install
+npm run dev
 ```
 
-Changes to code under `pages/` (and other server-only code such as `getStaticPaths`) require a rebuild to take effect in this mode.
+Then visit http://localhost:5173. The Vite dev server proxies `/api/*` to the backend at `http://localhost:3000` (override with the `VITE_API_TARGET` env var).
 
-Two project-specific environment variables control this:
+> `frontend/` includes an `.npmrc` with `legacy-peer-deps=true` because `swr@0.3` declares a React 16 peer while the app uses React 17; it runs fine on React 17.
 
-- `NEXT_PUBLIC_NODE_ENV=development` — makes the app behave as development (SQLite, no analytics) even when the Next.js server itself runs in production mode. Falls back to `NODE_ENV` if unset.
-- `NODE_ENV_NEXT_SERVER_ONLY=production` — forces only the Next.js server (dev vs prod) into production mode, without affecting the database or in-browser behavior.
+### Frontend production build
 
-### Development server on PostgreSQL
+```
+cd frontend
+npm run build      # outputs to frontend/dist
+npm run preview     # serve the built bundle locally
+```
+
+The built SPA is static; serve `frontend/dist` from any static host and point it (or a reverse proxy) at the backend's `/api`.
+
+### Backend on PostgreSQL
 
 Set up a local PostgreSQL database, then:
 
 ```
+cd backend
 npm run dev-pg
 ```
 
 To run other DB commands against PostgreSQL, export `REALWORLD_PG=true`:
 
 ```
+cd backend
 REALWORLD_PG=true npx tsx bin/sync-db.ts
 REALWORLD_PG=true npx tsx bin/generate-demo-data.ts
 ```
 
-### Production build (PostgreSQL)
-
-`npm run build` / `npm start` target PostgreSQL (the production database). For a local production-parity run:
-
-```
-npm run build-prod
-npm run start-prod
-```
+`npm start` (in `backend/`) runs the API in production mode against PostgreSQL.
 
 ## Generate demo data
 
 > This first erases any data in the database.
 
-```
-./bin/generate-demo-data.ts
-```
-
-(or `npx tsx bin/generate-demo-data.ts`). You can then log in with users such as `user0@mail.com` … `user9@mail.com`, all with password `asdf`.
-
-The data size is configurable:
+From the `backend/` directory:
 
 ```
-./bin/generate-demo-data.ts --n-users 5 --n-articles-per-user 8 --n-follows-per-user 3
+npm run seed
+```
+
+(equivalent to `npx tsx bin/generate-demo-data.ts`). You can then log in with users `user0@mail.com` … `user9@mail.com`, all with password `asdf`.
+
+The data size is configurable (pass flags after `--`):
+
+```
+npm run seed -- --n-users 5 --n-articles-per-user 8 --n-follows-per-user 3
 ```
 
 Create an empty (truncated) database instead:
 
 ```
-./bin/generate-demo-data.ts --empty
+npm run seed -- --empty
 ```
 
 ## Database migrations
 
-Migrations live under [`migrations/`](migrations) and are run by `sequelize-cli`. Pending migrations are applied automatically as part of the build via [`bin/sync-db.ts`](bin/sync-db.ts).
+Migrations live under [`backend/migrations/`](backend/migrations) and are run by `sequelize-cli`. [`backend/bin/sync-db.ts`](backend/bin/sync-db.ts) applies pending migrations, or — if the database does not exist yet — creates it directly from the current model definitions and records all migrations in the `SequelizeMeta` table (so Sequelize treats them as already applied):
 
-If the database does not exist yet, `sync-db` instead creates it directly from the current model definitions and records all existing migrations in the `SequelizeMeta` table (so Sequelize treats them as already applied).
+```
+cd backend
+npm run sync-db
+```
 
-`sequelize-cli` reads the shared config from [`front/config.ts`](front/config.ts); [`.sequelizerc`](.sequelizerc) registers the `tsx` loader so the CLI can read that TypeScript config.
+`sequelize-cli` reads the shared config from [`backend/config.ts`](backend/config.ts); [`backend/.sequelizerc`](backend/.sequelizerc) registers the `tsx` loader so the CLI can read that TypeScript config.
 
 ## Testing
 
-The tests are in [`test.ts`](test.ts) and run with Mocha (via `tsx`, configured in `.mocharc.json`):
+Backend tests are in [`backend/test.ts`](backend/test.ts) and run with Mocha (via `tsx`, configured in `.mocharc.json`):
 
 ```
+cd backend
 npm test
 ```
 
 They cover two kinds of tests:
 
-- **API tests** — start the full server on a random port and exercise the REST API end to end.
+- **API tests** — start the API on a random port and exercise the REST endpoints end to end.
 - **Unit tests** — call model/DB functions directly.
 
 Useful variants:
@@ -155,38 +184,40 @@ Useful variants:
 ```
 npm test -- -g 'substring of test title'   # run a single test
 npm run test-pg                             # run against PostgreSQL
-npm run test-next                           # also run tests that hit Next.js pages
 DEBUG='sequelize:sql:*' npm test            # show all SQL queries
 ```
 
-By default the SQLite tests run on a fresh in-memory database. Hitting Next.js pages is opt-in (`test-next`) because it requires a production build and is slow.
+By default the SQLite tests run on a fresh in-memory database.
 
 ## Linting and type-checking
 
+Backend:
+
 ```
+cd backend
 npm run tsc      # TypeScript type-check (no emit)
-npm run lint     # ESLint (includes Prettier checks)
 npm run format   # auto-fix formatting with Prettier
 ```
 
-`npm run build-dev` runs the type-check and lint as part of the Next.js build.
+Frontend:
+
+```
+cd frontend
+npm run format   # auto-fix formatting with Prettier
+```
 
 ## Debugging
 
-Enable extra request logging:
+Enable extra request logging on the backend:
 
 ```
+cd backend
 VERBOSE=1 npm run dev
 ```
 
 Log all database queries:
 
 ```
-DEBUG='sequelize:sql:*' npm run start-dev
-```
-
-Prevent the browser from opening automatically:
-
-```
-BROWSER=none npm run dev
+cd backend
+DEBUG='sequelize:sql:*' npm run dev
 ```

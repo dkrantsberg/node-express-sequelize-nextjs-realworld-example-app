@@ -1,0 +1,9 @@
+// Register the tsx loader so sequelize-cli (a plain node process) can read the
+// TypeScript config at config.ts.
+require('tsx/cjs')
+
+const path = require('path')
+
+module.exports = {
+  config: path.resolve(__dirname, 'config.ts'),
+}
