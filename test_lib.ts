@@ -1,31 +1,33 @@
-/// Need a separate file from test.js because Mocha automatically defines stuff like it,
+// Need a separate file from test.ts because Mocha automatically defines stuff like it,
 // which would break non-Mocha requirers.
 
-const perf_hooks = require('perf_hooks')
+import { performance } from 'perf_hooks'
 
-const models = require('./models')
+import { getSequelize, sync } from './models'
 
-const now = perf_hooks.performance.now.bind(perf_hooks.performance)
+const now = performance.now.bind(performance)
 
 // https://stackoverflow.com/questions/563406/add-days-to-javascript-date
-function addDays(oldDate, days) {
+function addDays(oldDate: Date, days: number): Date {
   const newDate = new Date(oldDate.valueOf())
   newDate.setDate(oldDate.getDate() + days)
   return newDate
 }
 const DATE0 = new Date(2000, 0, 0, 0, 0, 0, 0)
 
-function makeComment(articleId, authorId, i) {
+export function makeComment(articleId: number, authorId: number, i: number) {
   return {
     body: `my comment ${i}`,
     articleId,
     authorId,
   }
 }
-exports.makeComment = makeComment
 
-function makeArticle(i = 0, opts) {
-  let ret = {
+export function makeArticle(
+  i = 0,
+  opts: { api?: boolean; date?: Date; authorId?: number } = {}
+) {
+  const ret: Record<string, unknown> = {
     title: `My title ${i}`,
     description: `My description ${i}`,
     body: `# h1
@@ -75,15 +77,13 @@ List:
   }
   return ret
 }
-exports.makeArticle = makeArticle
 
-function makeTag(i) {
+export function makeTag(i: number) {
   return { name: `tag${i}` }
 }
-exports.makeTag = makeTag
 
-function makeUser(sequelize, i = 0) {
-  const userArg = {
+export function makeUser(sequelize?: any, i = 0) {
+  const userArg: Record<string, unknown> = {
     username: `user${i}`,
     email: `user${i}@mail.com`,
   }
@@ -98,16 +98,30 @@ function makeUser(sequelize, i = 0) {
   }
   return userArg
 }
-exports.makeUser = makeUser
 
-let printTimeNow
+let printTimeNow: number
 function printTime() {
   const newNow = now()
   console.error((newNow - printTimeNow) / 1000.0)
   printTimeNow = newNow
 }
 
-async function generateDemoData(params) {
+export interface GenerateDemoDataParams {
+  sequelize?: any
+  directory?: string
+  basename?: string
+  empty?: boolean
+  nUsers?: number
+  nArticlesPerUser?: number
+  nMaxCommentsPerArticle?: number
+  nMaxTagsPerArticle?: number
+  nFollowsPerUser?: number
+  nFavoritesPerUser?: number
+  nTags?: number
+  verbose?: boolean
+}
+
+export async function generateDemoData(params: GenerateDemoDataParams) {
   const nUsers = params.nUsers === undefined ? 10 : params.nUsers
   const nArticlesPerUser =
     params.nArticlesPerUser === undefined ? 10 : params.nArticlesPerUser
@@ -128,13 +142,13 @@ async function generateDemoData(params) {
 
   const nArticles = nUsers * nArticlesPerUser
 
-  let sequelize
+  let sequelize: any
   if (params.sequelize) {
     sequelize = params.sequelize
   } else {
-    sequelize = models.getSequelize(directory, basename)
+    sequelize = getSequelize(directory, basename)
   }
-  await models.sync(sequelize, { force: true })
+  await sync(sequelize, { force: true })
   if (!params.empty) {
     printTimeNow = now()
     if (verbose) console.error('User')
@@ -213,7 +227,7 @@ async function generateDemoData(params) {
 
     if (verbose) console.error('Comment')
     const commentArgs = []
-    let commentIdx = 0
+    const commentIdx = 0
     for (let i = 0; i < nArticles; i++) {
       for (let j = 0; j < i % (nMaxCommentsPerArticle + 1); j++) {
         commentArgs.push(
@@ -227,4 +241,3 @@ async function generateDemoData(params) {
 
   return sequelize
 }
-exports.generateDemoData = generateDemoData

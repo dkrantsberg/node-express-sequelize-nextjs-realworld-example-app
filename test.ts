@@ -1,48 +1,64 @@
-const assert = require('assert')
-const http = require('http')
+import assert from 'assert'
+import http from 'http'
 
-const app = require('./app')
-const test_lib = require('./test_lib')
+import { start } from './app'
+import * as test_lib from './test_lib'
 
-function testApp(cb, opts = {}) {
+const testNext = process.env.REALWORLD_TEST_NEXT === 'true'
+
+function testApp(
+  cb: (server: http.Server) => Promise<void>,
+  opts: { canTestNext?: boolean } = {}
+) {
   const canTestNext = opts.canTestNext === undefined ? false : opts.canTestNext
-  return app.start(0, canTestNext && testNext, async (server) => {
+  return start(0, canTestNext && testNext, async (server) => {
     await cb(server)
     server.close()
   })
 }
 
-beforeEach(async function () {
-  this.currentTest.sequelize = await test_lib.generateDemoData({ empty: true })
+beforeEach(async function (this: Mocha.Context) {
+  ;(this.currentTest as any).sequelize = await test_lib.generateDemoData({
+    empty: true,
+  })
 })
 
-afterEach(async function () {
-  return this.currentTest.sequelize.close()
+afterEach(async function (this: Mocha.Context) {
+  return (this.currentTest as any).sequelize.close()
 })
-
-const testNext = process.env.REALWORLD_TEST_NEXT === 'true'
 
 // https://stackoverflow.com/questions/6048504/synchronous-request-in-node-js/53338670#53338670
-function sendJsonHttp(opts) {
+interface SendJsonHttpOpts {
+  server: http.Server
+  method: string
+  path: string
+  body?: unknown
+  token?: string
+}
+function sendJsonHttp(
+  opts: SendJsonHttpOpts
+): Promise<[http.IncomingMessage, any]> {
   return new Promise((resolve, reject) => {
     try {
-      let body
+      let body: string
       if (opts.body) {
         body = JSON.stringify(opts.body)
       } else {
         body = ''
       }
-      const headers = {
+      const headers: Record<string, string> = {
         'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(body),
+        'Content-Length': Buffer.byteLength(body).toString(),
         Accept: 'application/json',
       }
       if (opts.token) {
         headers['Authorization'] = `Token ${opts.token}`
       }
+      const address = opts.server.address()
+      const port = typeof address === 'string' ? address : address?.port
       const options = {
         hostname: 'localhost',
-        port: opts.server.address().port,
+        port,
         path: opts.path,
         method: opts.method,
         headers,
@@ -53,7 +69,7 @@ function sendJsonHttp(opts) {
           let ret
           try {
             dataString = data.toString()
-            if (res.headers['content-type'].startsWith('application/json;')) {
+            if (res.headers['content-type']?.startsWith('application/json;')) {
               ret = JSON.parse(dataString)
             } else {
               ret = dataString
@@ -75,7 +91,7 @@ function sendJsonHttp(opts) {
   })
 }
 
-it('feed shows articles by followers', async function () {
+it('feed shows articles by followers', async function (this: Mocha.Context) {
   //  art0 by user0
   //  art1 by user1
   //  art2 by user2
@@ -96,7 +112,7 @@ it('feed shows articles by followers', async function () {
   // user2 follows user0 and user3
   // user3 follows user0 and user1
   const sequelize = await test_lib.generateDemoData({
-    sequelize: this.test.sequelize,
+    sequelize: (this.test as any).sequelize,
     nUsers: 4,
     nArticlesPerUser: 3,
     nFollowsPerUser: 2,
@@ -108,18 +124,16 @@ it('feed shows articles by followers', async function () {
 
   // getArticlesByFollowedAndCount
   const { count, rows } = await user0.findAndCountArticlesByFollowed(1, 4)
-  //assert.strictEqual(user0ArticlesByFollowed[].title, 'My title 10')
   assert.strictEqual(rows[0].title, 'My title 9')
   assert.strictEqual(rows[1].title, 'My title 6')
   assert.strictEqual(rows[2].title, 'My title 5')
   assert.strictEqual(rows[3].title, 'My title 2')
-  //assert.strictEqual(user0ArticlesByFollowed[4].title, 'My title 1')
   assert.strictEqual(rows.length, 4)
   assert.strictEqual(count, 6)
 })
 
-it('tags without articles are deleted automatically after their last article is deleted', async function () {
-  const sequelize = this.test.sequelize
+it('tags without articles are deleted automatically after their last article is deleted', async function (this: Mocha.Context) {
+  const sequelize = (this.test as any).sequelize
   const user = await sequelize.models.User.create(test_lib.makeUser(sequelize))
   const article0 = await sequelize.models.Article.create(
     test_lib.makeArticle(0, { authorId: user.id })
@@ -150,11 +164,11 @@ it('tags without articles are deleted automatically after their last article is 
   assert.strictEqual(tags.length, 0)
 })
 
-it('users can be deleted and deletion cascades to all relations', async function () {
+it('users can be deleted and deletion cascades to all relations', async function (this: Mocha.Context) {
   // This was failing previously because of cascading madness.
   // It is also interesting to see if article deletion will cascade into the
   // empty tag deletion hooks or not.
-  const sequelize = this.test.sequelize
+  const sequelize = (this.test as any).sequelize
   const user = await sequelize.models.User.create(test_lib.makeUser(sequelize))
   const article0 = await sequelize.models.Article.create(
     test_lib.makeArticle(0, { authorId: user.id })

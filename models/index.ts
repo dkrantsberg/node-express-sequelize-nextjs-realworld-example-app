@@ -1,26 +1,39 @@
-const fs = require('fs')
-const path = require('path')
+import fs from 'fs'
+import path from 'path'
 
-const { Sequelize, DataTypes } = require('sequelize')
+import {
+  DatabaseError,
+  DataTypes,
+  Options,
+  Sequelize,
+  SyncOptions,
+} from 'sequelize'
 
-const config = require('../front/config')
-const { DatabaseError } = require('sequelize')
+import config from '../front/config'
+import { Article } from './article'
+import { Comment } from './comment'
+import { SequelizeMeta } from './sequelize_meta'
+import { Tag } from './tag'
+import { User } from './user'
 
-function getSequelize(toplevelDir, toplevelBasename) {
-  const sequelizeParams = {
+export function getSequelize(
+  toplevelDir?: string,
+  toplevelBasename?: string
+): Sequelize {
+  const sequelizeParams: Options = {
     logging: config.verbose ? console.log : false,
     define: {
       freezeTableName: true,
     },
   }
-  let sequelize
+  let sequelize: Sequelize
   if (config.isProduction || config.postgres) {
-    sequelizeParams.dialect = config.production.dialect
+    sequelizeParams.dialect = config.production.dialect as 'postgres'
     sequelizeParams.dialectOptions = config.production.dialectOptions
     sequelize = new Sequelize(config.production.url, sequelizeParams)
   } else {
-    sequelizeParams.dialect = config.development.dialect
-    let storage
+    sequelizeParams.dialect = config.development.dialect as 'sqlite'
+    let storage: string
     if (process.env.NODE_ENV === 'test' || toplevelDir === undefined) {
       storage = ':memory:'
     } else {
@@ -32,11 +45,12 @@ function getSequelize(toplevelDir, toplevelBasename) {
     sequelizeParams.storage = storage
     sequelize = new Sequelize(sequelizeParams)
   }
-  const Article = require('./article')(sequelize)
-  const Comment = require('./comment')(sequelize)
-  require('./sequelize_meta')(sequelize)
-  const Tag = require('./tag')(sequelize)
-  const User = require('./user')(sequelize)
+
+  Article.initModel(sequelize)
+  Comment.initModel(sequelize)
+  SequelizeMeta.initModel(sequelize)
+  Tag.initModel(sequelize)
+  User.initModel(sequelize)
 
   // Associations.
 
@@ -172,8 +186,11 @@ function getSequelize(toplevelDir, toplevelBasename) {
 
 // Do sequelize.sync, and then also populate SequelizeMeta with migrations
 // that might not be needed if we've just done a full sync.
-async function sync(sequelize, opts = {}) {
-  let dbExists
+export async function sync(
+  sequelize: Sequelize,
+  opts: SyncOptions = {}
+): Promise<boolean> {
+  let dbExists = false
   try {
     await sequelize.models.SequelizeMeta.findOne()
     dbExists = true
@@ -193,9 +210,4 @@ async function sync(sequelize, opts = {}) {
     )
   }
   return dbExists
-}
-
-module.exports = {
-  getSequelize,
-  sync,
 }

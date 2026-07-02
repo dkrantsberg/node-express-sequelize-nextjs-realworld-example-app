@@ -1,25 +1,25 @@
-let isProduction
+let isProduction: boolean
 if (process.env.NEXT_PUBLIC_NODE_ENV === undefined) {
   isProduction = process.env.NODE_ENV === 'production'
 } else {
   isProduction = process.env.NEXT_PUBLIC_NODE_ENV === 'production'
 }
 
-let demoMaxObjs
+let demoMaxObjs: number
 if (isProduction) {
   demoMaxObjs = 1000
 } else {
   demoMaxObjs = 10
 }
 
-let databaseUrl
+let databaseUrl: string | undefined
 if (process.env.NODE_ENV === 'test') {
   databaseUrl = process.env.DATABASE_URL_TEST
 } else {
   databaseUrl = process.env.DATABASE_URL
 }
 
-module.exports = {
+const config = {
   apiPath: '/api',
   appName: 'Conduit',
   articleLimit: 10,
@@ -28,8 +28,7 @@ module.exports = {
   // If Sequelize were better, we would be able to do much more in individual complex queries.
   // But as things stand, we just have to bring data into memory and do secondary requests.
   maxObjsInMemory: 10000,
-  /** @type {boolean | 'blocking'} */
-  fallback: 'blocking',
+  fallback: 'blocking' as boolean | 'blocking',
   googleAnalyticsId: 'UA-47867706-3',
   isDemo: process.env.NEXT_PUBLIC_DEMO === 'true',
   // Default isProduction check. Affetcs all aspects of the application unless
@@ -49,7 +48,7 @@ module.exports = {
   prerenderAll: false,
   postgres: process.env.REALWORLD_PG === 'true',
   revalidate: 10,
-  secret: isProduction ? process.env.SECRET : 'secret',
+  secret: (isProduction ? process.env.SECRET : 'secret') as string,
   verbose: process.env.VERBOSE,
   blacklistTags: new Set(['cypress']),
 
@@ -76,3 +75,31 @@ module.exports = {
     logging: true,
   },
 }
+
+export default config
+
+// Named exports so both `import config from 'front/config'` and
+// `import { articleLimit, secret } from 'front/config'` work, and so that
+// sequelize-cli can read the `development` / `production` keys.
+export const {
+  apiPath,
+  appName,
+  articleLimit,
+  defaultProfileImage,
+  maxObjsInMemory,
+  fallback,
+  googleAnalyticsId,
+  isDemo,
+  isProductionNext,
+  port,
+  prerenderAll,
+  postgres,
+  revalidate,
+  secret,
+  verbose,
+  blacklistTags,
+  development,
+  production,
+} = config
+
+export { isProduction, demoMaxObjs }

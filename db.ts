@@ -1,9 +1,9 @@
 import path from 'path'
 
-const models = require('./models')
+import { getSequelize } from './models'
 
 // TODO sync. But we have to stop the server
 // before listen for that. Don't know how to do it.
-const sequelize = models.getSequelize(path.join(process.cwd()))
+const sequelize = getSequelize(path.join(process.cwd()))
 
 export default sequelize

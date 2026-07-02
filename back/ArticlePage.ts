@@ -1,13 +1,16 @@
 import { GetStaticProps, GetStaticPaths } from 'next'
+import { ModelStatic } from 'sequelize'
 
 import { ArticlePageProps } from 'front/ArticlePage'
 import { fallback, revalidate, prerenderAll } from 'front/config'
 import sequelize from 'db'
+import type { Article } from 'models/article'
 
 export const getStaticPathsArticle: GetStaticPaths = async () => {
   let paths
   if (prerenderAll) {
-    paths = (await sequelize.models.Article.findAll()).map((article) => {
+    const ArticleModel = sequelize.models.Article as ModelStatic<Article>
+    paths = (await ArticleModel.findAll()).map((article) => {
       return {
         params: {
           pid: article.slug,
@@ -28,7 +31,8 @@ export function getStaticPropsArticle(
   addComments?
 ): GetStaticProps {
   return async ({ params: { pid } }) => {
-    const article = await sequelize.models.Article.findOne({
+    const ArticleModel = sequelize.models.Article as ModelStatic<Article>
+    const article = await ArticleModel.findOne({
       where: { slug: pid },
       include: [{ model: sequelize.models.User, as: 'author' }],
     })
@@ -44,11 +48,15 @@ export function getStaticPropsArticle(
         include: [{ model: sequelize.models.User, as: 'author' }],
       })
     }
-    const props: ArticlePageProps = { article: await article.toJson() }
+    // toJson() serializes dates to ISO strings, whereas ArticleType/CommentType
+    // model them as numbers; cast at this boundary rather than churn the frontend types.
+    const props: ArticlePageProps = {
+      article: (await article.toJson()) as any,
+    }
     if (addComments) {
-      props.comments = await Promise.all(
+      props.comments = (await Promise.all(
         comments.map((comment) => comment.toJson())
-      )
+      )) as any
     }
     const ret: Awaited<ReturnType<GetStaticProps>> = {
       props,
