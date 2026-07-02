@@ -44,13 +44,4 @@ export class UserFavoriteArticle extends Model<
     )
     return UserFavoriteArticle
   }
-
-  static associate(sequelize: Sequelize) {
-    UserFavoriteArticle.belongsTo(sequelize.models.Article, {
-      foreignKey: 'articleId',
-    })
-    UserFavoriteArticle.belongsTo(sequelize.models.User, {
-      foreignKey: 'userId',
-    })
-  }
 }

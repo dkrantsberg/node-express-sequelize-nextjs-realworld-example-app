@@ -6,6 +6,7 @@ import { DatabaseError, Options, Sequelize, SyncOptions } from 'sequelize'
 import config from '../front/config'
 import { Article } from './article'
 import { Comment } from './comment'
+import { associateModels } from './relationships'
 import { SequelizeMeta } from './sequelize_meta'
 import { Tag } from './tag'
 import { User } from './user'
@@ -51,14 +52,8 @@ export function getSequelize(
   UserFavoriteArticle.initModel(sequelize)
   UserFollowUser.initModel(sequelize)
 
-  // Wire up relationships. Each model declares its own associations via
-  // hasMany()/hasOne()/belongsTo()/belongsToMany() in a static associate().
-  User.associate(sequelize)
-  Article.associate(sequelize)
-  Comment.associate(sequelize)
-  Tag.associate(sequelize)
-  UserFavoriteArticle.associate(sequelize)
-  UserFollowUser.associate(sequelize)
+  // Wire up all relationships between entities (see models/relationships.ts).
+  associateModels(sequelize)
 
   return sequelize
 }

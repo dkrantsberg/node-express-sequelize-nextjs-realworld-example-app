@@ -45,8 +45,4 @@ export class UserFollowUser extends Model<
     )
     return UserFollowUser
   }
-
-  static associate(sequelize: Sequelize) {
-    UserFollowUser.belongsTo(sequelize.models.User, { foreignKey: 'userId' })
-  }
 }
