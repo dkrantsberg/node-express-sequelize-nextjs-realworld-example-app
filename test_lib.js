@@ -5,7 +5,7 @@ const perf_hooks = require('perf_hooks')
 
 const models = require('./models')
 
-const now = perf_hooks.performance.now
+const now = perf_hooks.performance.now.bind(perf_hooks.performance)
 
 // https://stackoverflow.com/questions/563406/add-days-to-javascript-date
 function addDays(oldDate, days) {
