@@ -1,13 +1,17 @@
 import { GetStaticProps, GetStaticPaths } from 'next'
+import { ModelStatic } from 'sequelize'
 
 import { articleLimit, fallback, revalidate, prerenderAll } from 'front/config'
 import sequelize from 'db'
+import type { Article } from 'models/article'
+import type { User } from 'models/user'
 
 export const getStaticPathsProfile: GetStaticPaths = async () => {
   let paths
   if (prerenderAll) {
+    const UserModel = sequelize.models.User as ModelStatic<User>
     paths = (
-      await sequelize.models.User.findAll({
+      await UserModel.findAll({
         order: [['username', 'ASC']],
       })
     ).map((user) => {
@@ -42,13 +46,15 @@ export function getStaticPropsProfile(tab): GetStaticProps {
         where: { username: pid },
       })
     }
+    const ArticleModel = sequelize.models.Article as ModelStatic<Article>
+    const UserModel = sequelize.models.User as ModelStatic<User>
     const [articles, user] = await Promise.all([
-      sequelize.models.Article.findAndCountAll({
+      ArticleModel.findAndCountAll({
         order: [['createdAt', 'DESC']],
         limit: articleLimit,
         include,
       }),
-      sequelize.models.User.findOne({
+      UserModel.findOne({
         where: { username: pid },
       }),
     ])

@@ -1,0 +1,13 @@
+{
+  "watch": [
+    "app.ts",
+    "auth.ts",
+    "lib.ts",
+    "db.ts",
+    "api",
+    "models",
+    "front/config.ts"
+  ],
+  "ext": "ts,js,json",
+  "exec": "tsx ./app.ts"
+}

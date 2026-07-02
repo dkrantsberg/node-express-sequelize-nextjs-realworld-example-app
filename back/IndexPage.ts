@@ -1,14 +1,18 @@
 import { GetStaticProps } from 'next'
+import { ModelStatic } from 'sequelize'
 import { MyGetServerSideProps } from 'front/types'
-import { verify } from 'jsonwebtoken'
+import { JwtPayload, verify } from 'jsonwebtoken'
 
 import { getCookieFromReq, AUTH_COOKIE_NAME } from 'front'
 import { articleLimit, revalidate, secret } from 'front/config'
 import sequelize from 'db'
 import { getIndexTags } from 'lib'
+import type { Article } from 'models/article'
+import type { User } from 'models/user'
 
 async function getLoggedOutProps() {
-  const articles = await sequelize.models.Article.findAndCountAll({
+  const ArticleModel = sequelize.models.Article as ModelStatic<Article>
+  const articles = await ArticleModel.findAndCountAll({
     order: [['createdAt', 'DESC']],
     limit: articleLimit,
   })
@@ -21,19 +25,20 @@ async function getLoggedOutProps() {
   }
 }
 
-export async function getLoggedInUser(req, res) {
+export async function getLoggedInUser(req, res): Promise<User | null> {
   const authCookie = getCookieFromReq(req, AUTH_COOKIE_NAME)
-  let verifiedUser
+  let verifiedUser: JwtPayload | string
   if (authCookie) {
     try {
-      verifiedUser = verify(authCookie, secret)
+      verifiedUser = verify(authCookie, secret, { algorithms: ['HS256'] })
     } catch (e) {
       return null
     }
   } else {
     return null
   }
-  const user = await sequelize.models.User.findByPk(verifiedUser.id)
+  const UserModel = sequelize.models.User as ModelStatic<User>
+  const user = await UserModel.findByPk((verifiedUser as JwtPayload).id)
   if (user === null) {
     res.clearCookie(AUTH_COOKIE_NAME)
   }
